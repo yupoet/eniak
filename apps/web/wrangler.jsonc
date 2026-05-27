@@ -12,7 +12,11 @@
     "enabled": true
   },
   "vars": {
-    "NEXT_PUBLIC_API_BASE": "https://api.eniak.org"
+    // The browser bundle still references api.eniak.org for any client-side
+    // request that doesn't go through /api/runs. Internal SSR fetches use
+    // ENIAK_INTERNAL_API_BASE to skip the Cloudflare loopback (error 1003).
+    "NEXT_PUBLIC_API_BASE": "https://api.eniak.org",
+    "ENIAK_INTERNAL_API_BASE": "https://eniak-api-production.up.railway.app"
   },
   "routes": [
     { "pattern": "www.eniak.org", "custom_domain": true },
