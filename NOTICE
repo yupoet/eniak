@@ -1,0 +1,16 @@
+ENIAK — Evidence-Native Intelligent Academic Kernel
+Copyright 2026 Paris Yu and contributors
+
+This product includes software developed by Paris Yu and the ENIAK contributors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+---
+
+This repository references but does not vendor several open-source projects.
+See refs/MANIFEST.json for pinned references and their upstream URLs.
+Each referenced project remains under its own license.
