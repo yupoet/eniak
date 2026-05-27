@@ -104,19 +104,26 @@ class BookOrchestrator:
         *,
         chapter_count: int = 3,
         outline: BookOutline | None = None,
+        book: Book | None = None,
     ) -> BookResult:
+        """Generate chapters under ``book``. If ``book`` is None, create one."""
         outline = outline or await self.plan_outline(topic)
         outline.chapters = outline.chapters[:chapter_count]
 
-        book = Book(
-            title=outline.title,
-            subtitle=outline.subtitle,
-            topic=topic,
-            status="generating",
-            metadata_json={"outline": {"chapters": outline.chapters}},
-        )
-        self.session.add(book)
-        await self.session.flush()
+        if book is None:
+            book = Book(
+                title=outline.title,
+                subtitle=outline.subtitle,
+                topic=topic,
+                status="generating",
+                metadata_json={"outline": {"chapters": outline.chapters}},
+            )
+            self.session.add(book)
+            await self.session.flush()
+        else:
+            book.status = "generating"
+            book.metadata_json = {"outline": {"chapters": outline.chapters}}
+            await self.session.flush()
 
         chapter_ids: list[str] = []
         run_ids: list[str] = []
