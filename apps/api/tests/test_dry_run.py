@@ -80,15 +80,26 @@ async def test_config_endpoint_does_not_leak_secrets(client) -> None:
 
 @pytest.mark.asyncio
 async def test_create_run_endpoint(client) -> None:
+    # POST returns 202 immediately with a pending run; the background task does the work.
     res = await client.post("/runs", json={"topic": "evidence-native pipelines"})
-    assert res.status_code == 201, res.text
+    assert res.status_code == 202, res.text
     run = res.json()
-    assert run["status"] == "succeeded"
     assert run["topic"] == "evidence-native pipelines"
+    assert run["status"] in {"pending", "running", "succeeded"}
 
+    # Wait for the background task. ASGITransport runs background tasks inline at the
+    # end of the response, so by the next request the run should be done.
+    import asyncio
+
+    for _ in range(20):
+        detail = await client.get(f"/runs/{run['id']}")
+        if detail.status_code == 200 and detail.json()["status"] in {"succeeded", "failed"}:
+            break
+        await asyncio.sleep(0.05)
     detail = await client.get(f"/runs/{run['id']}")
     assert detail.status_code == 200
     detail_body = detail.json()
+    assert detail_body["status"] == "succeeded", detail_body
     assert len(detail_body["evidence_cards"]) == 3
     assert len(detail_body["chapters"]) == 1
     assert detail_body["cost"]["total_tokens"] >= 200

@@ -99,7 +99,18 @@ class DryRunOrchestrator:
         )
         self.session.add(run)
         await self.session.flush()
+        return await self._drive(run, topic)
 
+    async def _execute_existing(self, run: Run, topic: str) -> DryRunResult:
+        """Drive the pipeline against a pre-persisted Run (used by the API's background task)."""
+        run.status = RunStatus.running
+        run.model = getattr(self.llm, "default_model", None)
+        run.provider = getattr(self.llm, "provider", None)
+        run.started_at = datetime.now(timezone.utc)
+        await self.session.flush()
+        return await self._drive(run, topic)
+
+    async def _drive(self, run: Run, topic: str) -> DryRunResult:
         try:
             candidates = await self.radar.scan(topic)
             evidence_cards = await self._extract_evidence(run, topic, candidates)

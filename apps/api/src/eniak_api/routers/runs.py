@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+import asyncio
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
@@ -17,6 +20,7 @@ from eniak_evidence import (
     RunCreate,
     RunDetail,
     RunRead,
+    RunStatus,
     get_session,
 )
 from eniak_orchestrator import DryRunOrchestrator
@@ -27,19 +31,57 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/runs", tags=["runs"])
 
 
-@router.post("", response_model=RunRead, status_code=201, summary="Start a dry-run research loop")
-async def create_run(payload: RunCreate) -> Run:
-    async with get_session() as session:
-        orchestrator = DryRunOrchestrator(session, llm=_build_llm())
+async def _execute_run(run_id: str, topic: str) -> None:
+    """Background worker: drives the dry-run loop on an already-persisted Run row.
+
+    Uses its own session so the request handler can return immediately. Failures
+    are stamped onto the run.status / run.error fields so the UI can poll.
+    """
+    try:
+        async with get_session() as session:
+            run = await session.get(Run, run_id)
+            if run is None:
+                logger.error("background.run.missing", extra={"run_id": run_id})
+                return
+            orchestrator = DryRunOrchestrator(session, llm=_build_llm())
+            # Orchestrator will create its OWN run if you call .run(topic) — we
+            # already have one, so seed it and let the orchestrator extend it.
+            await orchestrator._execute_existing(run, topic)  # type: ignore[attr-defined]
+    except Exception:  # noqa: BLE001
+        logger.exception("background.run.failed", extra={"run_id": run_id})
+        # Stamp the failure separately so it survives the rollback above.
         try:
-            result = await orchestrator.run(payload.topic)
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("run.failed")
-            raise HTTPException(status_code=502, detail=f"Run failed: {exc}") from exc
-        run = await session.get(Run, result.run_id)
-        if run is None:
-            raise HTTPException(status_code=500, detail="Run vanished after commit")
-        return run
+            async with get_session() as session:
+                run = await session.get(Run, run_id)
+                if run is not None and run.status != RunStatus.failed:
+                    run.status = RunStatus.failed
+                    run.error = run.error or "background worker crashed"
+                    run.finished_at = datetime.now(timezone.utc)
+        except Exception:
+            logger.exception("background.run.cleanup_failed", extra={"run_id": run_id})
+
+
+@router.post("", response_model=RunRead, status_code=202, summary="Start a dry-run research loop")
+async def create_run(payload: RunCreate, background: BackgroundTasks) -> Run:
+    async with get_session() as session:
+        run = Run(
+            topic=payload.topic,
+            status=RunStatus.pending,
+            config_json={"pipeline": "dry-run-v1"},
+        )
+        session.add(run)
+        await session.flush()
+        run_id = run.id
+        # Return a fresh copy after the session commits.
+        await session.refresh(run)
+
+    background.add_task(_execute_run, run_id, payload.topic)
+
+    async with get_session() as session:
+        out = await session.get(Run, run_id)
+        if out is None:
+            raise HTTPException(status_code=500, detail="Run vanished after enqueue")
+        return out
 
 
 @router.get("", response_model=list[RunRead], summary="List recent runs")
