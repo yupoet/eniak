@@ -61,10 +61,36 @@ export default async function RunDetailPage({ params }: Props) {
         </h2>
         <div className="grid sm:grid-cols-2 gap-3">
           {detail.evidence_cards.map((card) => (
-            <EvidenceCardItem key={card.id} card={card} />
+            <EvidenceCardItem key={card.id} card={card} runId={detail.id} />
           ))}
         </div>
       </section>
+
+      {detail.contradictions.length > 0 && (
+        <section>
+          <h2 className="font-display text-xl font-semibold tracking-tight mb-3">
+            Contradictions detected
+          </h2>
+          <ul className="space-y-2">
+            {detail.contradictions.map((c) => (
+              <li
+                key={c.id}
+                className="rounded-md border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm"
+              >
+                <p className="text-ink-900">
+                  <span className="font-mono text-xs text-amber-800 mr-2">
+                    severity {(c.severity ?? 0).toFixed(2)}
+                  </span>
+                  {c.rationale ?? "(no rationale)"}
+                </p>
+                <p className="text-xs text-ink-400 font-mono mt-1">
+                  claim {c.claim_a_id.slice(0, 8)} ↔ {c.claim_b_id.slice(0, 8)}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {chapter && (
         <section>

@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "eniak-evidence",
     "pydantic>=2.10.0",
+    "httpx>=0.28.0",
 ]
 
 [build-system]

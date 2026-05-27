@@ -1,25 +1,13 @@
-"""Deterministic mock radar for Phase 2.
+"""Deterministic mock radar.
 
-Returns a small set of plausible-looking source candidates per topic so the rest
-of the pipeline (evidence extraction + chapter draft) can be exercised end-to-end.
+Provides repeatable canned source candidates so tests can exercise the full
+pipeline without hitting any external API. The real ``SourceCandidate`` lives
+in ``eniak_radar.base``; mock re-imports it for backwards compatibility.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
-
-
-@dataclass(frozen=True)
-class SourceCandidate:
-    title: str
-    authors: list[str]
-    venue: str
-    url: str
-    excerpt: str
-    retrieved_at: datetime = field(default_factory=lambda: datetime.now(UTC))
-    source_kind: str = "mock"
-
+from eniak_radar.base import SourceCandidate
 
 _FIXTURES: list[tuple[str, str, str, str]] = [
     (
@@ -47,11 +35,11 @@ _FIXTURES: list[tuple[str, str, str, str]] = [
 
 
 class MockRadar:
-    """Returns 3 deterministic source candidates per topic."""
+    name = "mock"
 
     async def scan(self, topic: str, *, limit: int = 3) -> list[SourceCandidate]:
         candidates: list[SourceCandidate] = []
-        for title, authors, venue, body in _FIXTURES[:limit]:
+        for title, authors, venue, body in _FIXTURES[: max(1, min(limit, len(_FIXTURES)))]:
             tailored_excerpt = (
                 f"In the context of \"{topic}\", the authors argue: {body}"
             )
@@ -62,6 +50,7 @@ class MockRadar:
                     venue=venue,
                     url=f"https://example.org/mock/{abs(hash((title, topic))) % 10_000_000}",
                     excerpt=tailored_excerpt,
+                    source_kind="mock",
                 )
             )
         return candidates

@@ -264,9 +264,14 @@ class Book(IdMixin, TimestampMixin, Base):
     title: Mapped[str] = mapped_column(String(1024), nullable=False)
     subtitle: Mapped[str | None] = mapped_column(String(1024))
     description: Mapped[str | None] = mapped_column(Text)
+    topic: Mapped[str | None] = mapped_column(String(2048))
+    status: Mapped[str] = mapped_column(String(32), default="draft")
     metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
 
     chapters: Mapped[list[Chapter]] = relationship(
+        back_populates="book", cascade="all, delete-orphan"
+    )
+    publish_records: Mapped[list[PublishRecord]] = relationship(
         back_populates="book", cascade="all, delete-orphan"
     )
 
@@ -290,6 +295,35 @@ class Chapter(IdMixin, TimestampMixin, Base):
     book: Mapped[Book | None] = relationship(back_populates="chapters")
     run: Mapped[Run | None] = relationship(back_populates="chapters")
     claims: Mapped[list[Claim]] = relationship(back_populates="chapter")
+    publish_records: Mapped[list[PublishRecord]] = relationship(
+        back_populates="chapter", cascade="all, delete-orphan"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Publishing: PublishRecord
+# ---------------------------------------------------------------------------
+
+
+class PublishRecord(IdMixin, TimestampMixin, Base):
+    __tablename__ = "publish_records"
+
+    book_id: Mapped[str | None] = mapped_column(
+        ForeignKey("books.id", ondelete="CASCADE"), index=True
+    )
+    chapter_id: Mapped[str | None] = mapped_column(
+        ForeignKey("chapters.id", ondelete="CASCADE"), index=True
+    )
+    target: Mapped[str] = mapped_column(String(64), nullable=False)  # markdown | feishu | quarto
+    mode: Mapped[str] = mapped_column(String(16), default="dry_run")  # dry_run | live
+    external_id: Mapped[str | None] = mapped_column(String(255))
+    external_url: Mapped[str | None] = mapped_column(String(2048))
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    error: Mapped[str | None] = mapped_column(Text)
+
+    book: Mapped[Book | None] = relationship(back_populates="publish_records")
+    chapter: Mapped[Chapter | None] = relationship(back_populates="publish_records")
 
 
 # Backwards-friendly alias matching the brainstorm naming.

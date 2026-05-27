@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from eniak_api.config import Settings, get_settings
-from eniak_api.routers import meta, runs
+from eniak_api.routers import books, meta, review, runs
 
 logger = structlog.get_logger(__name__)
 
@@ -100,6 +100,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(meta.router)
     app.include_router(runs.router)
+    app.include_router(books.router)
+    app.include_router(review.router)
 
     return app
 

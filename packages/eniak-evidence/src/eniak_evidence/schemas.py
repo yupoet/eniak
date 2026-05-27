@@ -57,6 +57,15 @@ class ClaimRead(ORMModel):
     created_at: datetime
 
 
+class ContradictionRead(ORMModel):
+    id: str
+    claim_a_id: str
+    claim_b_id: str
+    severity: float | None
+    rationale: str | None
+    created_at: datetime
+
+
 class ChapterRead(ORMModel):
     id: str
     title: str
@@ -92,6 +101,7 @@ class RunRead(ORMModel):
 class RunDetail(RunRead):
     evidence_cards: list[EvidenceCardRead] = Field(default_factory=list)
     chapters: list[ChapterRead] = Field(default_factory=list)
+    contradictions: list[ContradictionRead] = Field(default_factory=list)
     cost: CostSummary = Field(default_factory=CostSummary)
 
 
@@ -104,3 +114,48 @@ class ChapterUpdate(BaseModel):
     title: str | None = None
     body_markdown: str | None = None
     review_state: ReviewStateName | None = None
+
+
+class EvidenceCardUpdate(BaseModel):
+    review_state: ReviewStateName | None = None
+    annotation: str | None = None
+
+
+class BookRead(ORMModel):
+    id: str
+    title: str
+    subtitle: str | None
+    description: str | None
+    topic: str | None
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class BookDetail(BookRead):
+    chapters: list[ChapterRead] = Field(default_factory=list)
+    cost: CostSummary = Field(default_factory=CostSummary)
+
+
+class BookCreate(BaseModel):
+    topic: str = Field(min_length=3, max_length=2000)
+    chapter_count: int = Field(default=3, ge=1, le=8)
+
+
+class PublishRecordRead(ORMModel):
+    id: str
+    book_id: str | None
+    chapter_id: str | None
+    target: str
+    mode: str
+    external_id: str | None
+    external_url: str | None
+    version: int
+    payload_json: dict[str, Any] | None
+    error: str | None
+    created_at: datetime
+
+
+class PublishRequest(BaseModel):
+    target: str = Field(default="markdown")  # markdown | feishu
+    mode: str = Field(default="dry_run")  # dry_run | live

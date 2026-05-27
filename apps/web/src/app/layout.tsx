@@ -46,6 +46,9 @@ function Shell({ children }: { children: React.ReactNode }) {
             <a className="hover:text-ink-900" href="/">
               Runs
             </a>
+            <a className="hover:text-ink-900" href="/books">
+              Books
+            </a>
             <a
               className="hover:text-ink-900"
               href="https://github.com/yupoet/eniak"

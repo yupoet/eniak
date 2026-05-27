@@ -26,6 +26,7 @@ from eniak_orchestrator import (
     DryRunOrchestrator,
     find_inline_citations,
 )
+from eniak_radar import MockRadar
 from sqlalchemy import select
 
 CITATION_RE = re.compile(r"\[card:([0-9a-fA-F\-]+)\]")
@@ -34,7 +35,7 @@ CITATION_RE = re.compile(r"\[card:([0-9a-fA-F\-]+)\]")
 @pytest.mark.asyncio
 async def test_dry_run_persists_full_graph(engine, fake_llm) -> None:
     async with get_session() as session:
-        orchestrator = DryRunOrchestrator(session, llm=fake_llm)
+        orchestrator = DryRunOrchestrator(session, llm=fake_llm, radar=MockRadar())
         result = await orchestrator.run("citation faithfulness in LLM reports")
 
     async with get_session() as session:
@@ -82,7 +83,7 @@ async def test_retry_recovers_when_first_draft_forgets_citations(engine) -> None
 
     bad_then_good = FakeLLM(cite_in_draft=False, cite_on_retry=True)
     async with get_session() as session:
-        orchestrator = DryRunOrchestrator(session, llm=bad_then_good)
+        orchestrator = DryRunOrchestrator(session, llm=bad_then_good, radar=MockRadar())
         result = await orchestrator.run("recoverable miss")
 
     async with get_session() as session:
@@ -102,7 +103,7 @@ async def test_failed_run_when_model_refuses_to_cite(engine) -> None:
 
     never_cites = FakeLLM(cite_in_draft=False, cite_on_retry=False)
     async with get_session() as session:
-        orchestrator = DryRunOrchestrator(session, llm=never_cites)
+        orchestrator = DryRunOrchestrator(session, llm=never_cites, radar=MockRadar())
         with pytest.raises(CitationInvariantError):
             await orchestrator.run("hopeless")
 

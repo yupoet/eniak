@@ -1,9 +1,20 @@
-"""ENIAK radar — source candidate generation.
+"""ENIAK radar — source candidate generation + PDF retrieval."""
 
-Phase 2 ships only a mock provider so the dry-run loop is testable without
-external API keys. Real providers land in Phase 3.
-"""
+from eniak_radar.arxiv import ArxivRadar
+from eniak_radar.base import RadarProvider, SourceCandidate
+from eniak_radar.mock import MockRadar
+from eniak_radar.openalex import OpenAlexRadar
+from eniak_radar.pdf import ExtractedPdf, fetch_and_extract
+from eniak_radar.registry import RadarFanout, build_default_providers
 
-from eniak_radar.mock import MockRadar, SourceCandidate
-
-__all__ = ["MockRadar", "SourceCandidate"]
+__all__ = [
+    "ArxivRadar",
+    "ExtractedPdf",
+    "MockRadar",
+    "OpenAlexRadar",
+    "RadarFanout",
+    "RadarProvider",
+    "SourceCandidate",
+    "build_default_providers",
+    "fetch_and_extract",
+]

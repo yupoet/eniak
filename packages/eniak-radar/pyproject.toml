@@ -7,6 +7,9 @@ dependencies = [
     "eniak-evidence",
     "httpx>=0.28.0",
     "pydantic>=2.10.0",
+    "pypdf>=5.1.0",
+    "lxml>=5.3.0",
+    "aiofiles>=24.1.0",
 ]
 
 [build-system]

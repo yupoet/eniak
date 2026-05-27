@@ -116,8 +116,15 @@ async def client(engine, monkeypatch, fake_llm) -> AsyncIterator[AsyncClient]:
     monkeypatch.setenv("ENIAK_API_KEYS", "test-key-1,test-key-2")
     monkeypatch.setenv("ENIAK_ENV", "development")
     monkeypatch.setenv("ENIAK_RUNS_RATE_LIMIT", "100/minute")
+    # Phase 3/4 features off in unit tests so we never hit the network.
+    monkeypatch.setenv("ENIAK_FETCH_PDFS", "false")
+    monkeypatch.setenv("ENIAK_DETECT_CONTRADICTIONS", "false")
     monkeypatch.setattr(runs_router, "_build_llm", lambda: fake_llm)
     monkeypatch.setattr(runs_router, "_runs_limiter", None)
+    # Force the API router to use a Mock radar so we don't hit arxiv/openalex.
+    from eniak_radar import MockRadar as _MockRadar
+
+    monkeypatch.setattr(runs_router, "_build_radar", lambda: _MockRadar())
 
     app = create_app()
     app.router.lifespan_context = _noop_lifespan

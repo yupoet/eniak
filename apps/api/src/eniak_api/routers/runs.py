@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 
 from eniak_evidence import (
     Chapter,
+    Claim,
+    Contradiction,
     CostLedger,
     CostSummary,
     EvidenceCard,
@@ -53,7 +55,9 @@ async def _execute_run(run_id: str, topic: str) -> None:
             if run is None:
                 logger.error("background.run.missing", extra={"run_id": run_id})
                 return
-            orchestrator = DryRunOrchestrator(session, llm=_build_llm())
+            orchestrator = DryRunOrchestrator(
+                session, llm=_build_llm(), radar=_build_radar()
+            )
             await orchestrator.execute_existing(run, topic)
     except Exception:
         logger.exception("background.run.failed", extra={"run_id": run_id})
@@ -152,11 +156,21 @@ async def get_run(run_id: str) -> RunDetail:
             cost_usd=float(cost_usd),
         )
 
+        contradictions_stmt = (
+            select(Contradiction)
+            .join(Claim, Claim.id == Contradiction.claim_a_id)
+            .where(Claim.run_id == run_id)
+        )
+        contradictions = list(
+            (await session.execute(contradictions_stmt)).scalars().all()
+        )
+
         return RunDetail.model_validate(
             {
                 **{c.key: getattr(run, c.key) for c in Run.__table__.columns},
                 "evidence_cards": run.evidence_cards,
                 "chapters": run.chapters,
+                "contradictions": contradictions,
                 "cost": cost,
             }
         )
@@ -194,3 +208,10 @@ def _build_llm() -> LLMClient:
         api_key=s.llm_api_key,
         base_url=s.llm_base_url,
     )
+
+
+def _build_radar():
+    """Return the production radar. Tests monkeypatch this to MockRadar."""
+    from eniak_radar import RadarFanout
+
+    return RadarFanout()
