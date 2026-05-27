@@ -93,3 +93,27 @@ When ready (Phase 3):
 
 - Frontend: Cloudflare Pages dashboard → eniak-web → Functions → Real-time logs
 - Backend: `railway logs --service eniak-api` (with the project token), or the Railway dashboard
+
+## Why api.eniak.org goes through a Cloudflare Worker
+
+Railway's custom-domain TLS issuance uses HTTP-01 ACME challenges hitting the
+origin. With Cloudflare proxying api.eniak.org, those challenges never reach
+Railway and the certificate sits in `VALIDATING_OWNERSHIP` indefinitely.
+
+Solution: skip Railway's cert entirely.
+
+- `infra/cloudflare/eniak-api-proxy.js` — tiny Worker that rewrites the `Host`
+  header from `api.eniak.org` → `eniak-api-production.up.railway.app` so
+  Railway's router recognises the request.
+- `infra/cloudflare/deploy_proxy_worker.sh` — idempotent deploy script that
+  uploads the Worker and binds the `api.eniak.org/*` route.
+
+Public TLS is served by Cloudflare's Universal SSL (Let's Encrypt cert covering
+`*.eniak.org`). Origin TLS to Railway uses the existing `*.up.railway.app` cert
+in "Full" mode. No certbot, no waiting.
+
+To redeploy:
+
+```bash
+bash infra/cloudflare/deploy_proxy_worker.sh
+```
