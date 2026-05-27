@@ -1,15 +1,14 @@
-import { listRuns } from "@/lib/api";
+import { listRunsServer } from "@/lib/server-api";
 import { RunForm } from "@/components/RunForm";
 import { RunList } from "@/components/RunList";
 
-export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  let runs: Awaited<ReturnType<typeof listRuns>> = [];
+  let runs: Awaited<ReturnType<typeof listRunsServer>> = [];
   let apiError: string | null = null;
   try {
-    runs = await listRuns();
+    runs = await listRunsServer();
   } catch (err) {
     apiError = err instanceof Error ? err.message : String(err);
   }

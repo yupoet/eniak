@@ -3,13 +3,7 @@
 from __future__ import annotations
 
 import logging
-
-import asyncio
-from datetime import datetime, timezone
-
-from fastapi import APIRouter, BackgroundTasks, HTTPException
-from sqlalchemy import func, select
-from sqlalchemy.orm import selectinload
+from datetime import UTC, datetime
 
 from eniak_evidence import (
     Chapter,
@@ -25,17 +19,33 @@ from eniak_evidence import (
 )
 from eniak_orchestrator import DryRunOrchestrator
 from eniak_writer.llm import LLMClient
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
+from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
+
+from eniak_api.config import get_settings
+from eniak_api.rate_limit import RateLimitExceeded, SlidingWindowLimiter
+from eniak_api.security import client_ip, require_api_key
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/runs", tags=["runs"])
 
+# Built lazily on first POST so settings/env are loaded.
+_runs_limiter: SlidingWindowLimiter | None = None
+
+
+def _get_runs_limiter() -> SlidingWindowLimiter:
+    global _runs_limiter
+    if _runs_limiter is None:
+        _runs_limiter = SlidingWindowLimiter(get_settings().eniak_runs_rate_limit)
+    return _runs_limiter
+
 
 async def _execute_run(run_id: str, topic: str) -> None:
     """Background worker: drives the dry-run loop on an already-persisted Run row.
 
-    Uses its own session so the request handler can return immediately. Failures
-    are stamped onto the run.status / run.error fields so the UI can poll.
+    Failures are stamped onto the run.status / run.error fields so the UI can poll.
     """
     try:
         async with get_session() as session:
@@ -44,25 +54,40 @@ async def _execute_run(run_id: str, topic: str) -> None:
                 logger.error("background.run.missing", extra={"run_id": run_id})
                 return
             orchestrator = DryRunOrchestrator(session, llm=_build_llm())
-            # Orchestrator will create its OWN run if you call .run(topic) — we
-            # already have one, so seed it and let the orchestrator extend it.
-            await orchestrator._execute_existing(run, topic)  # type: ignore[attr-defined]
-    except Exception:  # noqa: BLE001
+            await orchestrator.execute_existing(run, topic)
+    except Exception:
         logger.exception("background.run.failed", extra={"run_id": run_id})
-        # Stamp the failure separately so it survives the rollback above.
         try:
             async with get_session() as session:
                 run = await session.get(Run, run_id)
                 if run is not None and run.status != RunStatus.failed:
                     run.status = RunStatus.failed
                     run.error = run.error or "background worker crashed"
-                    run.finished_at = datetime.now(timezone.utc)
+                    run.finished_at = datetime.now(UTC)
         except Exception:
             logger.exception("background.run.cleanup_failed", extra={"run_id": run_id})
 
 
-@router.post("", response_model=RunRead, status_code=202, summary="Start a dry-run research loop")
-async def create_run(payload: RunCreate, background: BackgroundTasks) -> Run:
+@router.post(
+    "",
+    response_model=RunRead,
+    status_code=202,
+    summary="Start a dry-run research loop",
+    dependencies=[Depends(require_api_key)],
+)
+async def create_run(
+    payload: RunCreate,
+    background: BackgroundTasks,
+    request: Request,
+    response: Response,
+) -> Run:
+    limiter = _get_runs_limiter()
+    try:
+        limiter.check(client_ip(request))
+    except RateLimitExceeded as exc:
+        response.headers["Retry-After"] = str(int(exc.retry_after) + 1)
+        raise HTTPException(status_code=429, detail=str(exc)) from None
+
     async with get_session() as session:
         run = Run(
             topic=payload.topic,
@@ -72,7 +97,6 @@ async def create_run(payload: RunCreate, background: BackgroundTasks) -> Run:
         session.add(run)
         await session.flush()
         run_id = run.id
-        # Return a fresh copy after the session commits.
         await session.refresh(run)
 
     background.add_task(_execute_run, run_id, payload.topic)
@@ -92,7 +116,11 @@ async def list_runs(limit: int = 25) -> list[Run]:
         return list(result.scalars().all())
 
 
-@router.get("/{run_id}", response_model=RunDetail, summary="Run detail with evidence + chapters + cost")
+@router.get(
+    "/{run_id}",
+    response_model=RunDetail,
+    summary="Run detail with evidence + chapters + cost",
+)
 async def get_run(run_id: str) -> RunDetail:
     async with get_session() as session:
         stmt = (
@@ -160,8 +188,6 @@ async def get_run_chapter_markdown(run_id: str) -> dict[str, str]:
 
 
 def _build_llm() -> LLMClient:
-    from eniak_api.config import get_settings
-
     s = get_settings()
     return LLMClient(
         default_model=s.eniak_default_model,

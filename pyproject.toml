@@ -30,8 +30,17 @@ line-length = 100
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP", "N", "ASYNC", "S", "C4", "DTZ", "T20", "SIM", "TCH"]
-ignore = ["S101", "S608"]  # allow asserts in tests, parameterized SQL
+select = ["E", "F", "I", "B", "UP", "N", "ASYNC", "S", "C4", "DTZ", "T20", "SIM"]
+# TCH (move imports under TYPE_CHECKING) is opinionated; we use SQLAlchemy
+# Mapped[...] runtime types which would force conditional imports everywhere.
+# UP042 (StrEnum) is fine in 3.11+ but SQLAlchemy's Enum() still expects the
+# str+Enum classic shape, so leave it alone.
+# N818 (Error suffix) — CitationInvariantError already uses Error, allow others.
+ignore = [
+    "S101",   # allow asserts in tests
+    "S608",   # parameterized SQL is fine
+    "UP042",  # str, Enum still preferred over StrEnum for SQLAlchemy bridge
+]
 
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**" = ["S101", "S106", "S311"]

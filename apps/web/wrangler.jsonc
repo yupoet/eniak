@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "eniak-web",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-01-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "binding": "ASSETS",
+    "directory": ".open-next/assets"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "NEXT_PUBLIC_API_BASE": "https://api.eniak.org"
+  },
+  "routes": [
+    { "pattern": "www.eniak.org", "custom_domain": true },
+    { "pattern": "eniak.org", "custom_domain": true }
+  ]
+}

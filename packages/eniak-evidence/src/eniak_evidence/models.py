@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import enum
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import (
@@ -41,7 +41,7 @@ def _uuid7_str() -> str:
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class RunStatus(str, enum.Enum):

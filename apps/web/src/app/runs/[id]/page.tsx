@@ -2,11 +2,10 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { getRun } from "@/lib/api";
+import { getRunServer } from "@/lib/server-api";
 import { StatusPill } from "@/components/StatusPill";
 import { EvidenceCardItem } from "@/components/EvidenceCardItem";
 
-export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 interface Props {
@@ -15,9 +14,9 @@ interface Props {
 
 export default async function RunDetailPage({ params }: Props) {
   const { id } = await params;
-  let detail: Awaited<ReturnType<typeof getRun>>;
+  let detail: Awaited<ReturnType<typeof getRunServer>>;
   try {
-    detail = await getRun(id);
+    detail = await getRunServer(id);
   } catch {
     notFound();
   }

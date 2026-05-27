@@ -2,31 +2,34 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
+import re
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 import pytest
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-
 from eniak_evidence import dispose_engine, init_engine
 from eniak_evidence.db import Base, get_engine
 from eniak_writer.llm import LLMResponse
+from httpx import ASGITransport, AsyncClient
 
 
 class FakeLLM:
-    """Deterministic stand-in for Kimi during tests.
+    """Deterministic stand-in for the real LLM during tests.
 
-    Returns a JSON evidence card for the extraction step and a citation-faithful
-    markdown chapter for the draft step.
+    Toggle ``cite_in_draft`` to model a model that forgets to cite. The
+    orchestrator's retry path then takes over.
     """
 
     default_model = "test/fake-llm"
     provider = "test"
 
-    def __init__(self) -> None:
+    def __init__(self, *, cite_in_draft: bool = True, cite_on_retry: bool = True) -> None:
         self.calls: list[dict] = []
+        self.cite_in_draft = cite_in_draft
+        self.cite_on_retry = cite_on_retry
+        self._draft_call = 0
 
     async def complete(
         self,
@@ -46,16 +49,27 @@ class FakeLLM:
             }
             content = json.dumps(payload)
         else:
-            # Chapter draft — extract the card IDs from the prompt and cite them.
-            import re
-
+            # Chapter draft path.
+            self._draft_call += 1
             ids = re.findall(r"id=([0-9a-fA-F\-]+)", prompt)
-            citations = " ".join(f"[card:{i}]" for i in ids) or "[card:unknown]"
-            content = (
-                "# Test Chapter\n\n"
-                "Evidence-native research pipelines anchor every claim to a source. "
-                f"{citations}\n\n## Open questions\n\n- How do we measure citation faithfulness at scale?\n"
+            this_attempt_cites = (
+                self.cite_in_draft if self._draft_call == 1 else self.cite_on_retry
             )
+            if this_attempt_cites and ids:
+                citations = " ".join(f"[card:{i}]" for i in ids)
+                content = (
+                    "# Test Chapter\n\n"
+                    "Evidence-native research pipelines anchor every claim to a source. "
+                    f"{citations}\n\n## Open questions\n\n- "
+                    "How do we measure citation faithfulness at scale?\n"
+                )
+            else:
+                # No inline citations.
+                content = (
+                    "# Test Chapter\n\n"
+                    "Some prose without any inline references.\n\n"
+                    "## Open questions\n\n- How would citations help?\n"
+                )
         return LLMResponse(
             content=content,
             model=self.default_model,
@@ -85,28 +99,29 @@ def fake_llm() -> FakeLLM:
     return FakeLLM()
 
 
-@pytest_asyncio.fixture
-async def client(engine, monkeypatch, fake_llm) -> AsyncIterator[AsyncClient]:
-    """ASGI test client with the LLM monkey-patched to FakeLLM."""
-    from eniak_api.app import create_app
-    from eniak_api.routers import runs as runs_router
-
-    monkeypatch.setattr(runs_router, "_build_llm", lambda: fake_llm)
-
-    app = create_app()
-    # Replace lifespan-initialised engine with our test engine.
-    app.router.lifespan_context = _noop_lifespan
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        yield ac
-
-
-from contextlib import asynccontextmanager
-
-
 @asynccontextmanager
 async def _noop_lifespan(app):
     yield
 
 
-# Silence "asyncio event loop is closed" noise from aiosqlite on teardown.
-asyncio.get_event_loop_policy()
+@pytest_asyncio.fixture
+async def client(engine, monkeypatch, fake_llm) -> AsyncIterator[AsyncClient]:
+    """ASGI test client with the LLM monkey-patched to FakeLLM and an API key set."""
+    from eniak_api.app import create_app
+    from eniak_api.config import get_settings
+    from eniak_api.routers import runs as runs_router
+
+    # Fresh settings each test so monkeypatched env vars take effect.
+    get_settings.cache_clear()
+    monkeypatch.setenv("ENIAK_API_KEYS", "test-key-1,test-key-2")
+    monkeypatch.setenv("ENIAK_ENV", "development")
+    monkeypatch.setenv("ENIAK_RUNS_RATE_LIMIT", "100/minute")
+    monkeypatch.setattr(runs_router, "_build_llm", lambda: fake_llm)
+    monkeypatch.setattr(runs_router, "_runs_limiter", None)
+
+    app = create_app()
+    app.router.lifespan_context = _noop_lifespan
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
+
+    get_settings.cache_clear()

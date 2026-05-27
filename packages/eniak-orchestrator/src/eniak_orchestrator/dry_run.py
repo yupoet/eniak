@@ -3,12 +3,15 @@
 Pipeline:
     topic
       -> mock radar scan
-      -> evidence card extraction (Kimi via LiteLLM)
-      -> claim + citation graph build
-      -> chapter draft (Kimi via LiteLLM)
-      -> markdown output persisted on the Chapter row
+      -> evidence card extraction (LLM)
+      -> chapter draft with inline [card:<id>] citations (LLM, retry once if missing)
+      -> claim + citation graph built from the inline citations actually present
+      -> markdown export off the Chapter row
 
-Persists Run / Source / EvidenceCard / Claim / Citation / Chapter / CostLedger.
+The citation invariant is enforced for real: if the drafted body has no inline
+[card:<id>] references after one retry with a stricter prompt, the run is
+marked failed with a clear error. We never fabricate claims to make the schema
+look populated.
 """
 
 from __future__ import annotations
@@ -17,10 +20,8 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Protocol
-
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from eniak_evidence.models import (
     Chapter,
@@ -36,8 +37,14 @@ from eniak_evidence.models import (
 from eniak_radar import MockRadar, SourceCandidate
 from eniak_writer.llm import LLMClient, LLMResponse
 from eniak_writer.prompts import CHAPTER_DRAFT_TEMPLATE, EVIDENCE_EXTRACTION_TEMPLATE
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
+
+
+class CitationInvariantError(RuntimeError):
+    """Raised when the chapter draft has no inline [card:<id>] citations
+    even after a retry with a stricter prompt."""
 
 
 @dataclass
@@ -61,6 +68,7 @@ class _LLM(Protocol):
 
 
 _JSON_RE = re.compile(r"\{[\s\S]*\}")
+_CITATION_RE = re.compile(r"\[card:([0-9a-fA-F\-]+)\]")
 
 
 def _extract_json(text: str) -> dict:
@@ -72,6 +80,18 @@ def _extract_json(text: str) -> dict:
     if match:
         return json.loads(match.group(0))
     raise ValueError(f"No JSON object found in model output: {text[:200]!r}")
+
+
+def find_inline_citations(body: str, valid_card_ids: set[str]) -> dict[str, list[str]]:
+    """Return {card_id: [verbatim refs]} for every inline [card:<id>] in body
+    that resolves to a known card.
+    """
+    hits: dict[str, list[str]] = {}
+    for match in _CITATION_RE.finditer(body):
+        card_id = match.group(1)
+        if card_id in valid_card_ids:
+            hits.setdefault(card_id, []).append(match.group(0))
+    return hits
 
 
 class DryRunOrchestrator:
@@ -94,21 +114,24 @@ class DryRunOrchestrator:
             status=RunStatus.running,
             model=getattr(self.llm, "default_model", None),
             provider=getattr(self.llm, "provider", None),
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
             config_json={"pipeline": "dry-run-v1"},
         )
         self.session.add(run)
         await self.session.flush()
         return await self._drive(run, topic)
 
-    async def _execute_existing(self, run: Run, topic: str) -> DryRunResult:
-        """Drive the pipeline against a pre-persisted Run (used by the API's background task)."""
+    async def execute_existing(self, run: Run, topic: str) -> DryRunResult:
+        """Drive the pipeline against a pre-persisted Run (background worker entrypoint)."""
         run.status = RunStatus.running
         run.model = getattr(self.llm, "default_model", None)
         run.provider = getattr(self.llm, "provider", None)
-        run.started_at = datetime.now(timezone.utc)
+        run.started_at = datetime.now(UTC)
         await self.session.flush()
         return await self._drive(run, topic)
+
+    # Backwards-compatible alias for any callers that imported the old name.
+    _execute_existing = execute_existing
 
     async def _drive(self, run: Run, topic: str) -> DryRunResult:
         try:
@@ -116,7 +139,7 @@ class DryRunOrchestrator:
             evidence_cards = await self._extract_evidence(run, topic, candidates)
             chapter, claims = await self._draft_chapter(run, topic, evidence_cards)
             run.status = RunStatus.succeeded
-            run.finished_at = datetime.now(timezone.utc)
+            run.finished_at = datetime.now(UTC)
             run.output_json = {
                 "chapter_id": chapter.id,
                 "evidence_card_ids": [c.id for c in evidence_cards],
@@ -132,7 +155,7 @@ class DryRunOrchestrator:
         except Exception as exc:
             run.status = RunStatus.failed
             run.error = f"{type(exc).__name__}: {exc}"
-            run.finished_at = datetime.now(timezone.utc)
+            run.finished_at = datetime.now(UTC)
             await self.session.flush()
             raise
 
@@ -195,17 +218,11 @@ class DryRunOrchestrator:
             f"- id={c.id}\n  summary: {c.summary}\n  quote: {c.quote or '(no quote)'}"
             for c in cards
         )
-        prompt = CHAPTER_DRAFT_TEMPLATE.format(topic=topic, cards_block=cards_block)
-        response = await self.llm.complete(
-            prompt,
-            system="You write clear, citation-faithful research prose.",
-            temperature=0.4,
-            max_tokens=1500,
-        )
-        self._record_cost(run, response, purpose="draft_chapter")
-        body = response.content.strip()
-        title = self._extract_title(body) or f"Notes on {topic[:60]}"
+        valid_ids = {c.id for c in cards}
 
+        body = await self._draft_with_citations(run, topic, cards_block, valid_ids)
+
+        title = self._extract_title(body) or f"Notes on {topic[:60]}"
         chapter = Chapter(
             run_id=run.id,
             title=title,
@@ -215,9 +232,57 @@ class DryRunOrchestrator:
         self.session.add(chapter)
         await self.session.flush()
 
-        # Build Claim rows by harvesting cited card IDs from the body.
         claims = await self._materialise_claims(run, chapter, body, cards)
         return chapter, claims
+
+    async def _draft_with_citations(
+        self,
+        run: Run,
+        topic: str,
+        cards_block: str,
+        valid_ids: set[str],
+    ) -> str:
+        """Ask the model to draft. If it forgot the inline [card:<id>] markers,
+        retry once with a stricter prompt. Fail loud after the retry.
+        """
+        prompt = CHAPTER_DRAFT_TEMPLATE.format(topic=topic, cards_block=cards_block)
+        response = await self.llm.complete(
+            prompt,
+            system="You write clear, citation-faithful research prose.",
+            temperature=0.4,
+            max_tokens=1500,
+        )
+        self._record_cost(run, response, purpose="draft_chapter")
+        body = response.content.strip()
+        hits = find_inline_citations(body, valid_ids)
+        if hits:
+            return body
+
+        # Retry once with a stricter system prompt.
+        logger.warning("draft.no_inline_citations.retrying", extra={"run_id": run.id})
+        retry_prompt = (
+            "Your previous response was rejected because it contained no inline "
+            "citations of the form [card:<id>]. Rewrite the chapter so that EVERY "
+            "factual paragraph carries at least one [card:<id>] from the list "
+            "below. Do not invent IDs.\n\n"
+        ) + prompt
+        retry_response = await self.llm.complete(
+            retry_prompt,
+            system=(
+                "Strict citation mode. Every factual sentence must end with one or "
+                "more [card:<id>] references using ONLY the supplied IDs."
+            ),
+            temperature=0.2,
+            max_tokens=1500,
+        )
+        self._record_cost(run, retry_response, purpose="draft_chapter_retry")
+        body = retry_response.content.strip()
+        if not find_inline_citations(body, valid_ids):
+            raise CitationInvariantError(
+                "Model produced no inline [card:<id>] references after one retry; "
+                "refusing to fabricate citations."
+            )
+        return body
 
     async def _materialise_claims(
         self,
@@ -227,20 +292,13 @@ class DryRunOrchestrator:
         cards: list[EvidenceCard],
     ) -> list[Claim]:
         card_by_id = {c.id: c for c in cards}
-        cited: dict[str, list[str]] = {}
-        for match in re.finditer(r"\[card:([0-9a-fA-F\-]+)\]", body):
-            card_id = match.group(1)
-            if card_id in card_by_id:
-                cited.setdefault(card_id, []).append(match.group(0))
+        cited = find_inline_citations(body, set(card_by_id))
+        if not cited:
+            # _draft_with_citations should have already raised; this is belt-and-braces.
+            raise CitationInvariantError("Chapter body has no resolvable inline citations.")
 
         claims: list[Claim] = []
-        if not cited:
-            # Cite-all fallback so the citation invariant holds even if the
-            # model forgot the inline syntax (still useful for the dry-run loop).
-            for card_id in card_by_id:
-                cited[card_id] = []
-
-        for card_id, _locators in cited.items():
+        for card_id, locators in cited.items():
             card = card_by_id[card_id]
             claim = Claim(
                 run_id=run.id,
@@ -251,34 +309,36 @@ class DryRunOrchestrator:
             )
             self.session.add(claim)
             await self.session.flush()
-            citation = Citation(
-                claim_id=claim.id,
-                evidence_card_id=card.id,
-                locator=f"chapter:{chapter.id}",
-                relation="supports",
+            self.session.add(
+                Citation(
+                    claim_id=claim.id,
+                    evidence_card_id=card.id,
+                    locator=f"chapter:{chapter.id}#{locators[0]}",
+                    relation="supports",
+                )
             )
-            self.session.add(citation)
             claims.append(claim)
         await self.session.flush()
         return claims
 
     @staticmethod
     def _extract_title(body: str) -> str | None:
-        for line in body.splitlines():
-            line = line.strip()
+        for raw_line in body.splitlines():
+            line = raw_line.strip()
             if line.startswith("# "):
                 return line[2:].strip()
         return None
 
     def _record_cost(self, run: Run, response: LLMResponse, *, purpose: str) -> None:
-        entry = CostLedger(
-            run_id=run.id,
-            model=response.model,
-            provider=response.provider,
-            prompt_tokens=response.prompt_tokens,
-            completion_tokens=response.completion_tokens,
-            total_tokens=response.total_tokens,
-            cost_usd=response.cost_usd,
-            purpose=purpose,
+        self.session.add(
+            CostLedger(
+                run_id=run.id,
+                model=response.model,
+                provider=response.provider,
+                prompt_tokens=response.prompt_tokens,
+                completion_tokens=response.completion_tokens,
+                total_tokens=response.total_tokens,
+                cost_usd=response.cost_usd,
+                purpose=purpose,
+            )
         )
-        self.session.add(entry)

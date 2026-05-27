@@ -7,7 +7,7 @@ of the pipeline (evidence extraction + chapter draft) can be exercised end-to-en
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 @dataclass(frozen=True)
@@ -17,7 +17,7 @@ class SourceCandidate:
     venue: str
     url: str
     excerpt: str
-    retrieved_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    retrieved_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     source_kind: str = "mock"
 
 

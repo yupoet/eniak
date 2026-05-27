@@ -25,9 +25,8 @@ async def healthz() -> dict[str, str]:
 
 @router.get("/readyz", summary="Readiness probe — verifies DB connection")
 async def readyz() -> dict[str, str]:
-    from sqlalchemy import text
-
     from eniak_evidence.db import get_engine
+    from sqlalchemy import text
 
     engine = get_engine()
     async with engine.connect() as conn:

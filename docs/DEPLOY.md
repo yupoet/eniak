@@ -1,48 +1,64 @@
 # Deploying ENIAK
 
-Live as of 2026-05-27:
+Live as of 2026-05-27 (post-Supabase + OpenNext migration):
 
 | Surface | URL | Host |
 |---|---|---|
-| Frontend | https://www.eniak.org · https://eniak.org | Cloudflare Pages (`eniak-web.pages.dev`) |
-| Backend | https://api.eniak.org | Railway (`eniak-api-production.up.railway.app`) |
-| Database | SQLite (`/tmp/eniak.sqlite3` on Railway, ephemeral) | local-only for Phase 2; Supabase Postgres planned |
+| Frontend | https://www.eniak.org · https://eniak.org | Cloudflare Workers (OpenNext build of Next.js 15) |
+| Backend | https://api.eniak.org | Railway (`eniak-api-production.up.railway.app`) via Cloudflare Worker proxy |
+| Database | Supabase Postgres 17 (`db.jkpqhiepvitzxweatqfn.supabase.co`) + pgvector | session pooler 5432 for Alembic, transaction pooler 6543 for app |
 | LLM | Aliyun DashScope coding plan (Qwen 3.5-plus) | `https://coding.dashscope.aliyuncs.com/v1` |
+| Auth | Bearer token on POST /runs | rotated key in `ENIAK_API_KEYS` on Railway + `ENIAK_API_KEY` Worker secret |
 
-## What the bootstrap script did
+## What the deploy did
 
 ```text
-Cloudflare Pages:
-  ✓ created project          eniak-web
-  ✓ attached custom domains  www.eniak.org, eniak.org
-  ✓ set env var              NEXT_PUBLIC_API_BASE=https://api.eniak.org
-  ✓ deployed                 .vercel/output/static built via @cloudflare/next-on-pages
+Cloudflare Workers:
+  ✓ Worker     eniak-web (OpenNext build of Next.js — full SSR + assets binding)
+  ✓ custom_domain bindings declared in apps/web/wrangler.jsonc:
+                  www.eniak.org, eniak.org
+  ✓ secret     ENIAK_API_KEY (used by /app/api/runs route handler to call backend)
+  ✓ vars       NEXT_PUBLIC_API_BASE=https://api.eniak.org
+
+  ✓ Worker     eniak-api-proxy (rewrites Host for api.eniak.org -> Railway)
+  ✓ route      api.eniak.org/* -> eniak-api-proxy
 
 Cloudflare DNS (zone eniak.org):
-  ✓ CNAME  www.eniak.org -> eniak-web.pages.dev   (proxied)
-  ✓ CNAME  eniak.org     -> eniak-web.pages.dev   (proxied)
-  ✓ CNAME  api.eniak.org -> d8184t7d.up.railway.app  (unproxied — Railway needs origin SNI)
+  ✓ All A/CNAME records created automatically by `wrangler deploy` per the
+    custom_domain bindings. infra/scripts/cf_dns_setup.sh is kept for DR only.
+
+Supabase:
+  ✓ project    eniak (jkpqhiepvitzxweatqfn) in ap-southeast-1
+  ✓ extension  pgvector enabled
+  ✓ schema     11 tables migrated via Alembic (revision 9eef2ff220cc)
 
 Railway (workspace: Paris Y.'s Projects):
   ✓ project    eniak (80368c35-863b-4bbd-a02f-f3c32d4be400)
   ✓ service    eniak-api (942e79ae-a730-4a7a-a4b6-b40bf2449f27)
   ✓ env vars   LLM_API_KEY, LLM_BASE_URL, ENIAK_DEFAULT_MODEL, ENIAK_ENV=production,
-               ENIAK_CORS_ORIGINS, PORT=8000, DATABASE_URL=sqlite+aiosqlite:////tmp/...
-  ✓ domain     api.eniak.org (custom) + eniak-api-production.up.railway.app (default)
+               ENIAK_CORS_ORIGINS, PORT=8000, ENIAK_API_KEYS,
+               DATABASE_URL=postgresql+asyncpg://...@aws-1-ap-southeast-1.pooler.supabase.com:6543/...,
+               DATABASE_URL_DIRECT=postgresql+psycopg://...:5432/postgres
+  ✓ domain     api.eniak.org via the Cloudflare Worker proxy (no Railway-issued cert needed)
   ✓ deployed   via `railway up --service eniak-api --ci`
 ```
 
 ## Re-deploying
 
-### Frontend (Cloudflare Pages)
+### Frontend (Cloudflare Workers via OpenNext)
 
 ```bash
 cd apps/web
-npx @cloudflare/next-on-pages
+# First-time only: register the secret on the Worker.
+echo "$ENIAK_API_KEY" | npx wrangler secret put ENIAK_API_KEY --name eniak-web
+
+# Build + deploy.
 CLOUDFLARE_API_TOKEN=$CF_API_TOKEN CLOUDFLARE_ACCOUNT_ID=$CF_ACCOUNT_ID \
-  npx wrangler pages deploy .vercel/output/static \
-    --project-name=eniak-web --branch=main --commit-dirty=true
+  npm run deploy
 ```
+
+`wrangler.jsonc` declares the custom domains (`www.eniak.org`, `eniak.org`); the
+deploy creates the routes + DNS records automatically.
 
 ### Backend (Railway)
 

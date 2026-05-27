@@ -8,11 +8,10 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import structlog
+from eniak_evidence import Base, dispose_engine, init_engine
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
-
-from eniak_evidence import Base, dispose_engine, get_session, init_engine
 
 from eniak_api.config import Settings, get_settings
 from eniak_api.routers import meta, runs
@@ -35,27 +34,35 @@ def _configure_logging(settings: Settings) -> None:
     )
 
 
-async def _ensure_schema() -> None:
-    """Create tables on boot for SQLite local dev.
-
-    Production uses Alembic migrations; this is a convenience for the dry-run loop.
+async def _ensure_schema_or_verify(database_url: str) -> None:
+    """For SQLite: create tables (dev convenience).
+    For Postgres: assume Alembic has migrated; just verify the schema is there.
     """
     from eniak_evidence.db import get_engine
 
     engine = get_engine()
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        # Confirm we can read something.
+        if database_url.startswith("sqlite"):
+            await conn.run_sync(Base.metadata.create_all)
+        # Pre-flight a single round-trip so a misconfigured DB fails the boot
+        # rather than the first request.
         await conn.execute(text("SELECT 1"))
 
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings: Settings = app.state.settings
-    os.makedirs(os.path.dirname(settings.database_url.split("///")[-1]) or ".", exist_ok=True) if "sqlite" in settings.database_url else None
+    if "sqlite" in settings.database_url:
+        sqlite_dir = os.path.dirname(settings.database_url.split("///")[-1])
+        if sqlite_dir:
+            os.makedirs(sqlite_dir, exist_ok=True)
     init_engine(settings.database_url)
-    await _ensure_schema()
-    logger.info("eniak.api.boot", env=settings.eniak_env, db=_safe_db_url(settings.database_url))
+    await _ensure_schema_or_verify(settings.database_url)
+    logger.info(
+        "eniak.api.boot",
+        env=settings.eniak_env,
+        db=_safe_db_url(settings.database_url),
+    )
     try:
         yield
     finally:

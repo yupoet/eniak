@@ -8,18 +8,19 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "pages:build": "npx @cloudflare/next-on-pages",
-    "pages:deploy": "wrangler pages deploy .vercel/output/static --project-name=eniak-web"
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload"
   },
   "dependencies": {
-    "next": "15.0.4",
-    "react": "19.0.0",
-    "react-dom": "19.0.0",
+    "next": "^15.5.18",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
     "react-markdown": "9.0.1",
     "remark-gfm": "4.0.0"
   },
   "devDependencies": {
-    "@cloudflare/next-on-pages": "1.13.7",
+    "@opennextjs/cloudflare": "^1.19.11",
     "@types/node": "22.10.2",
     "@types/react": "19.0.1",
     "@types/react-dom": "19.0.2",
@@ -27,6 +28,6 @@
     "postcss": "8.4.49",
     "tailwindcss": "3.4.17",
     "typescript": "5.7.2",
-    "wrangler": "3.95.0"
+    "wrangler": "^4.95.0"
   }
 }

@@ -27,19 +27,41 @@ class Base(DeclarativeBase):
 
 
 def init_engine(database_url: str, **kwargs: Any) -> AsyncEngine:
-    """Initialise the global async engine. Idempotent for the same URL."""
+    """Initialise the global async engine. Idempotent for the same URL.
+
+    Adjusts driver kwargs per backend:
+    - SQLite (aiosqlite) needs ``check_same_thread=False``.
+    - asyncpg behind a transaction-mode pooler (Supabase / PgBouncer) must
+      disable prepared-statement caching, otherwise reused connections see
+      "prepared statement already exists" errors after the first request.
+    """
     global _engine, _sessionmaker
     if _engine is not None:
         return _engine
-    # SQLite needs check_same_thread=False; the async driver handles it.
+
     connect_args: dict[str, Any] = {}
+    engine_kwargs: dict[str, Any] = {
+        "echo": kwargs.pop("echo", False),
+        "future": True,
+    }
+
     if database_url.startswith("sqlite"):
         connect_args["check_same_thread"] = False
+    elif "+asyncpg" in database_url:
+        # Required for any PgBouncer transaction-pooled endpoint.
+        connect_args["statement_cache_size"] = 0
+        connect_args["prepared_statement_cache_size"] = 0
+        # Each container request gets a fresh checkout — keep the pool small
+        # and recycle so we never starve the pooler's shared connection slots.
+        engine_kwargs.setdefault("pool_size", 5)
+        engine_kwargs.setdefault("max_overflow", 5)
+        engine_kwargs.setdefault("pool_pre_ping", True)
+        engine_kwargs.setdefault("pool_recycle", 1800)
+
     _engine = create_async_engine(
         database_url,
-        echo=kwargs.pop("echo", False),
-        future=True,
         connect_args=connect_args,
+        **engine_kwargs,
         **kwargs,
     )
     _sessionmaker = async_sessionmaker(
