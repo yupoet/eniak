@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Pinned reference projects cloned into /data/eniak/refs for local study. This file is the source of truth for what version of each reference ENIAK has been compared against. Use these SHAs when citing a pattern in design docs (e.g. 'ported from storm@fb951af7').",
+  "pinned_at": "2026-05-27",
+  "policy": {
+    "shallow_clone": true,
+    "tracked_by_git": false,
+    "gitignore_rule": "refs/* (with !refs/README.md and !refs/MANIFEST.json)",
+    "update_command": "scripts/refs-pin.sh (TODO Phase 1)"
+  },
+  "refs": [
+    {
+      "name": "langgraph",
+      "url": "https://github.com/langchain-ai/langgraph",
+      "commit": "add269632bb32c57f3252b7a7006c8115b579fb4",
+      "layer": "orchestrator",
+      "fit": "STRONG",
+      "purpose": "Durable stateful agent graph with checkpointers (Postgres/SQLite) and human-in-the-loop. Candidate substrate for Phase 3+ orchestrator; not used in Phase 2."
+    },
+    {
+      "name": "deer-flow",
+      "url": "https://github.com/bytedance/deer-flow",
+      "commit": "162fb2143e53dc6487cd99f5ec1288810dbc58ec",
+      "layer": "orchestrator + cross-cutting",
+      "fit": "STRONG",
+      "purpose": "Production super-agent harness with skills, sub-agents, sandboxes, memory, MCP. Closest end-to-end architectural twin."
+    },
+    {
+      "name": "open_deep_research",
+      "url": "https://github.com/langchain-ai/open_deep_research",
+      "commit": "aafb2b208a5bcf75f275b70dd064064048869272",
+      "layer": "orchestrator + writer",
+      "fit": "OK",
+      "purpose": "LangGraph-native deep-research blueprint. Worked example of langgraph multi-agent research."
+    },
+    {
+      "name": "paper-qa",
+      "url": "https://github.com/Future-House/paper-qa",
+      "commit": "d2c3c698fdf06986aa021812ab3186d3696438d8",
+      "layer": "evidence",
+      "fit": "STRONG",
+      "purpose": "Scientific-document RAG with PDF chunking and citation grounding. Directly transplantable to EvidenceCard generation."
+    },
+    {
+      "name": "graphiti",
+      "url": "https://github.com/getzep/graphiti",
+      "commit": "34f56e65e0fe2096132c8d16f3a1a4ac9300a5f6",
+      "layer": "evidence",
+      "fit": "STRONG",
+      "purpose": "Bi-temporal knowledge graph: Episode -> EntityNode -> EntityEdge with validity windows + hybrid (BM25+vector+rerank) search. Model for cross-document claim/citation graph."
+    },
+    {
+      "name": "storm",
+      "url": "https://github.com/stanford-oval/storm",
+      "commit": "fb951af7744dab086e34962e9bc6fe878e145f83",
+      "layer": "writer + radar",
+      "fit": "STRONG",
+      "purpose": "Two-stage outline -> article with multi-perspective question asking. Best long-form writing reference; nothing else here does structured long-form."
+    },
+    {
+      "name": "LongWriter",
+      "url": "https://github.com/THUDM/LongWriter",
+      "commit": "447539b356a8b09760b51eca876e19b6fc1f2dd7",
+      "layer": "writer",
+      "fit": "STRONG",
+      "purpose": "AgentWrite plan -> write-per-paragraph -> stitch pipeline for >10k word outputs. ICLR 2025. Port for chapter-length draft generation."
+    },
+    {
+      "name": "quarto-cli",
+      "url": "https://github.com/quarto-dev/quarto-cli",
+      "commit": "fc0cf88dc875245e2ff81f902dc7cae5d5896737",
+      "layer": "writer + publisher",
+      "fit": "STRONG",
+      "purpose": "Book project layout (_quarto.yml, parts, chapters, cross-refs). Writer emits Quarto-flavored Markdown; Publisher exports."
+    },
+    {
+      "name": "research-claw",
+      "url": "https://github.com/nanoAgentTeam/research-claw",
+      "commit": "7e16077939e80f21277b8d5be5007361bac95547",
+      "layer": "publisher + orchestrator",
+      "fit": "STRONG",
+      "purpose": "Self-hosted research assistant with channels/feishu.py, project/session model, Overleaf+Git sync. Only ref with real Feishu publishing."
+    },
+    {
+      "name": "oapi-sdk-python",
+      "url": "https://github.com/larksuite/oapi-sdk-python",
+      "commit": "0bf3a884793c59d7dbfff54dc9dc49ae5461e752",
+      "layer": "publisher",
+      "fit": "STRONG",
+      "purpose": "Official Lark/Feishu v2 Python SDK. Source for docx block schema, wiki node API, tenant token auto-refresh."
+    },
+    {
+      "name": "langfuse",
+      "url": "https://github.com/langfuse/langfuse",
+      "commit": "1594b7cff536cfab1407a324146834dd7089513d",
+      "layer": "cross-cutting (prompts + cost + observability)",
+      "fit": "STRONG",
+      "purpose": "Content-addressed prompt registry with labels (production/staging) + token/cost ledger + tracing. Source of truth for PromptTemplate and CostLedger entities."
+    },
+    {
+      "name": "litellm",
+      "url": "https://github.com/BerriAI/litellm",
+      "commit": "73e90713117204ea1084ec8a568af3a60cd14b54",
+      "layer": "cross-cutting (model gateway)",
+      "fit": "STRONG",
+      "purpose": "OpenAI-format unification across 100+ providers + budget manager + retries. Drop-in for ENIAK model layer."
+    },
+    {
+      "name": "phoenix",
+      "url": "https://github.com/Arize-ai/phoenix",
+      "commit": "5ef972923bc500081a064fb34a25108d212b6851",
+      "layer": "cross-cutting (eval + observability)",
+      "fit": "STRONG",
+      "purpose": "OTel traces + LLM-as-judge + datasets/experiments. Eval harness for retrieval recall and citation faithfulness. Caveat: ELv2 license, self-host only."
+    },
+    {
+      "name": "agentevals",
+      "url": "https://github.com/langchain-ai/agentevals",
+      "commit": "a8d6d15c18ed624d84ababb55fdd746954e5f544",
+      "layer": "cross-cutting (eval)",
+      "fit": "OK",
+      "purpose": "Lightweight trajectory match (strict / unordered / subset) + LLM-as-judge. Wire into orchestrator regression tests."
+    },
+    {
+      "name": "de-anthropocentric-research-engine",
+      "url": "https://github.com/yogsoth-ai/de-anthropocentric-research-engine",
+      "commit": "aaf786512c28e92c16155ebd87931587ae427d06",
+      "layer": "radar + cross-cutting (skills)",
+      "fit": "OK",
+      "purpose": "Markdown skill bank (gap detection, hypothesis generation, adversarial stress-testing). Treat as a prompt/SOP library, not as architecture."
+    },
+    {
+      "name": "ljg-skills",
+      "url": "https://github.com/lijigang/ljg-skills",
+      "commit": "c603eb5345c06524a6702f443c8d7a62c2efc310",
+      "layer": "evidence + writer (reading skills)",
+      "fit": "STRONG",
+      "purpose": "Claude Code skills for reading: ljg-paper (paper digestion for non-specialists), ljg-paper-river (citation lineage), ljg-book (5-element book breakdown), ljg-read (translation/structure/cross-disciplinary). Port the skill schema as Writer prompts and the book-breakdown structure as a Book outline template.",
+      "caveat": "No LICENSE detected at clone time (2026-05-27). Treat as study-only until license clarified; do not copy text verbatim into ENIAK."
+    }
+  ],
+  "dropped": [
+    {
+      "name": "autoresearch",
+      "url": "https://github.com/karpathy/autoresearch",
+      "reason": "Single-GPU self-modifying training loop. Zero overlap with research+book pipeline. Also confusingly shares a name with the user's private /data/science/autoresearch."
+    },
+    {
+      "name": "agent-framework",
+      "url": "https://github.com/microsoft/agent-framework",
+      "reason": ".NET-primary, Python is afterthought. Every orchestration capability is already covered by langgraph with better Python ergonomics."
+    },
+    {
+      "name": "gpt-researcher",
+      "url": "https://github.com/assafelovic/gpt-researcher",
+      "reason": "Same shape as open_deep_research (plan -> parallel search -> summarize -> report) but with more cruft. Keep open_deep_research as the canonical langgraph-native reference."
+    }
+  ]
+}
