@@ -1,0 +1,30 @@
+# Local dev stack: Postgres + pgvector + Adminer.
+# The backend itself runs out-of-container via `uv run uvicorn ...` so hot-reload works.
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: eniak
+      POSTGRES_PASSWORD: eniak_dev
+      POSTGRES_DB: eniak
+    ports:
+      - "5432:5432"
+    volumes:
+      - eniak_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eniak"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  adminer:
+    image: adminer:4
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  eniak_pgdata:

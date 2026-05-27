@@ -7,13 +7,15 @@
 *An open research operating layer for traceable, book-quality knowledge work.*
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Status: Phase 0](https://img.shields.io/badge/status-phase_0_bootstrap-orange.svg)](docs/plan.md)
+[![Status: Phase 2](https://img.shields.io/badge/status-phase_2_dry--run-amber.svg)](docs/plan.md)
+[![Site: eniak.org](https://img.shields.io/badge/site-www.eniak.org-c2410c.svg)](https://www.eniak.org)
+[![API: api.eniak.org](https://img.shields.io/badge/api-api.eniak.org-c2410c.svg)](https://api.eniak.org/docs)
 [![Python](https://img.shields.io/badge/python-3.11+-3776AB.svg?logo=python&logoColor=white)](#)
 [![Node](https://img.shields.io/badge/node-20+-339933.svg?logo=node.js&logoColor=white)](#)
+[![Frontend: Cloudflare Pages](https://img.shields.io/badge/frontend-Cloudflare%20Pages-F38020.svg?logo=cloudflare&logoColor=white)](https://pages.cloudflare.com)
+[![Backend: Railway](https://img.shields.io/badge/backend-Railway-0B0D0E.svg?logo=railway&logoColor=white)](https://railway.com)
+[![LLM: Kimi/Qwen](https://img.shields.io/badge/LLM-Aliyun%20Kimi%20%2F%20Qwen-FF6A00.svg)](#)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing)
-[![Made with LangGraph](https://img.shields.io/badge/orchestration-LangGraph-1C3C3C.svg)](https://github.com/langchain-ai/langgraph)
-[![Powered by PaperQA2](https://img.shields.io/badge/RAG-PaperQA2-005571.svg)](https://github.com/Future-House/paper-qa)
-[![Publishes to Lark](https://img.shields.io/badge/publisher-Lark/Feishu-00D6B9.svg)](#)
 
 </div>
 
@@ -90,15 +92,23 @@ Detailed design rationale lives in [`docs/brainstorm.md`](docs/brainstorm.md). T
 
 ## Status / 当前状态
 
-> **Phase 0 — Bootstrap.** Repository scaffold, design docs, pinned references. No runnable code yet.
+> **Phase 2 — Dry-run loop live.** Backend + frontend deployed. Mock radar feeds Qwen 3.5-plus extraction, citation-faithful chapter draft, Markdown export.
 
-The first milestone is the **dry-run research loop**:
+### Try it
+
+- **UI:** https://www.eniak.org — enter a topic, get an evidence-cited draft in ~30-90s.
+- **API:** https://api.eniak.org/docs — OpenAPI playground (`POST /runs`, `GET /runs/{id}`, `GET /runs/{id}/chapter.md`).
+
+### Pipeline (Phase 2)
 
 ```text
-research topic → mock radar result → evidence card → chapter draft → markdown export
+research topic → mock radar (3 sources) → LLM extracts evidence cards (1 call per source)
+              → LLM drafts chapter citing card IDs → claim/citation graph persisted
+              → Markdown export → CostLedger entry per call
 ```
 
-See [`docs/plan.md`](docs/plan.md) for the full roadmap (Phase 0 → 5).
+See [`docs/plan.md`](docs/plan.md) for the full roadmap (Phase 0 → 5) and
+[`docs/DEPLOY.md`](docs/DEPLOY.md) for the live deployment topology.
 
 ---
 
@@ -106,25 +116,40 @@ See [`docs/plan.md`](docs/plan.md) for the full roadmap (Phase 0 → 5).
 
 ```text
 apps/
-  api/                 # Backend service (language TBD: Python primary candidate)
-  web/                 # Frontend workspace (reviewer UI)
-packages/
-  shared/              # Shared schemas, generated TS types from Pydantic
-eniak/
-  radar/               # Source monitoring (arXiv, S2, OpenAlex, PubMed, web, regulators)
-  evidence/            # Domain core: Source, Document, EvidenceCard, Citation, Claim, Run
-  orchestrator/        # Workflow runtime (small explicit graph in Phase 2; LangGraph in Phase 3+)
-  writer/              # Outline → chapter → section → bibliography
-  publisher/           # Markdown / Lark-Feishu / Quarto / PDF adapters
+  api/                       # FastAPI + SQLAlchemy 2.0 backend (Railway)
+    src/eniak_api/           # routers, config, app factory
+    migrations/              # Alembic
+    tests/                   # pytest dry-run end-to-end
+  web/                       # Next.js 15 (App Router) frontend (Cloudflare Pages)
+    src/app                  # routes
+    src/components           # UI primitives
+    src/lib/api.ts           # typed client of the FastAPI backend
+
+packages/                    # Python workspace members (uv)
+  eniak-evidence/            # Domain core: Source, Document, EvidenceCard, Claim, Citation,
+                             #              Contradiction, Run, PromptTemplate, ReviewState, CostLedger,
+                             #              Book, Chapter, Section
+  eniak-radar/               # Source monitoring (mock in Phase 2; real providers in Phase 3)
+  eniak-orchestrator/        # Workflow runtime (small explicit graph)
+  eniak-writer/              # LiteLLM client + prompts
+  eniak-publisher/           # Markdown (live) + Lark/Quarto/PDF (planned)
+
 infra/
-  docker/              # docker-compose for Postgres + pgvector, etc.
-  migrations/          # Database migrations
+  docker/                    # docker-compose for local Postgres + pgvector
+  scripts/cf_dns_setup.sh    # Idempotent DNS upsert on eniak.org
+
 docs/
-  brainstorm.md        # Architecture rationale
-  plan.md              # Phased build plan
-  references.md        # Reference project index
-refs/                  # 15 pinned open-source references for local study (gitignored)
-  MANIFEST.json        # Pinned commit SHAs (tracked)
+  brainstorm.md              # Architecture rationale
+  plan.md                    # Phased build plan
+  references.md              # Reference project index (15 pinned repos)
+  DEPLOY.md                  # Live deployment topology + redeploy commands
+
+refs/                        # 15 pinned open-source references for local study (gitignored)
+  MANIFEST.json              # Pinned commit SHAs (tracked)
+
+Dockerfile                   # Backend image (used by Railway)
+railway.json                 # Railway deploy config
+pyproject.toml               # uv workspace root
 ```
 
 ---

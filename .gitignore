@@ -32,6 +32,11 @@ node_modules/
 .yarn/
 apps/web/dist/
 apps/web/.vite/
+apps/web/.next/
+apps/web/.vercel/
+apps/web/.wrangler/
+apps/web/next-env.d.ts
+apps/web/.env*.local
 
 # Local data, indexes, and generated research artifacts
 data/
@@ -57,3 +62,4 @@ Thumbs.db
 .idea/
 .vscode/
 
+apps/web/tsconfig.tsbuildinfo

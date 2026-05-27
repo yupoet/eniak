@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --paper: #fbfaf6;
+  --ink: #1a1814;
+}
+
+html, body {
+  background: var(--paper);
+  color: var(--ink);
+  font-feature-settings: "kern", "liga", "calt";
+}
+
+@layer components {
+  .prose-eniak h1 {
+    @apply font-display text-3xl font-semibold tracking-tight mb-4;
+  }
+  .prose-eniak h2 {
+    @apply font-display text-xl font-semibold tracking-tight mt-8 mb-3 text-ink-900;
+  }
+  .prose-eniak p {
+    @apply leading-relaxed my-3 text-ink-900;
+  }
+  .prose-eniak ul {
+    @apply list-disc list-inside space-y-1 my-3;
+  }
+  .prose-eniak code {
+    @apply font-mono text-sm bg-ink-100 px-1.5 py-0.5 rounded;
+  }
+  .prose-eniak a {
+    @apply text-accent underline decoration-accent/30 underline-offset-2 hover:decoration-accent;
+  }
+  .prose-eniak blockquote {
+    @apply border-l-4 border-accent-soft pl-4 italic text-ink-600 my-4;
+  }
+}
+
+/* Inline citation chip rendered when raw text contains [card:<id>] */
+.citation-chip {
+  @apply inline-flex items-center gap-1 rounded-md bg-accent-soft text-accent-deep
+         px-1.5 py-0 text-[0.7rem] font-mono align-text-bottom no-underline;
+}

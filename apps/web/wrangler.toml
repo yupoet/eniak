@@ -1,0 +1,8 @@
+name = "eniak-web"
+compatibility_date = "2026-01-01"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = ".vercel/output/static"
+
+# Variables set per-environment in the Cloudflare dashboard or via `wrangler pages secret put`.
+# NEXT_PUBLIC_API_BASE is consumed at build time, so it must live in the Pages project's
+# Build & Deploy → Environment Variables section, not here.

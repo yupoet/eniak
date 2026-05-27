@@ -1,0 +1,15 @@
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  reactStrictMode: true,
+  experimental: {
+    serverActions: { allowedOrigins: ["www.eniak.org", "eniak.org", "localhost:3000"] },
+  },
+  async rewrites() {
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+    return [
+      { source: "/api/:path*", destination: `${apiBase}/:path*` },
+    ];
+  },
+};
+
+export default nextConfig;

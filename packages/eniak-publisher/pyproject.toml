@@ -1,0 +1,16 @@
+[project]
+name = "eniak-publisher"
+version = "0.0.1"
+description = "ENIAK publisher — Markdown / Lark-Feishu / Quarto adapters"
+requires-python = ">=3.11"
+dependencies = [
+    "eniak-evidence",
+    "pydantic>=2.10.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/eniak_publisher"]

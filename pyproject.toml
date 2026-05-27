@@ -1,0 +1,48 @@
+[project]
+name = "eniak"
+version = "0.0.1"
+description = "Evidence-Native Intelligent Academic Kernel"
+authors = [{ name = "Paris Yu" }]
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.uv.workspace]
+members = [
+    "apps/api",
+    "packages/eniak-evidence",
+    "packages/eniak-radar",
+    "packages/eniak-orchestrator",
+    "packages/eniak-writer",
+    "packages/eniak-publisher",
+]
+
+[tool.uv.sources]
+eniak-evidence = { workspace = true }
+eniak-radar = { workspace = true }
+eniak-orchestrator = { workspace = true }
+eniak-writer = { workspace = true }
+eniak-publisher = { workspace = true }
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "ASYNC", "S", "C4", "DTZ", "T20", "SIM", "TCH"]
+ignore = ["S101", "S608"]  # allow asserts in tests, parameterized SQL
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101", "S106", "S311"]
+"**/migrations/**" = ["E501"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["apps/api/tests", "packages/*/tests"]
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.pyright]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+reportMissingImports = "warning"
